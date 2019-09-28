@@ -44,7 +44,7 @@ class CustomizedMainWindow(GraphicLib.GWindow):
         self.BUTTON_HEIGHT = self.start_click_button.getHeight()
         # self.addEventListener('drag', self.start_reset_handler)
         self.add(self.start_click_button, (WINDOW_WIDTH - self.start_click_button.getWidth())/2, (WINDOW_HEIGHT - self.start_click_button.getHeight())/2)
-        self.__clock = self.setInterval(self.add_enemy, PUT_ENEMY_INTERVAL, ())
+        self.__clock = self.set_interval_with_param(self.add_enemy, PUT_ENEMY_INTERVAL, ())
 
         self.big_jet_plane = None
 
@@ -85,14 +85,18 @@ class CustomizedMainWindow(GraphicLib.GWindow):
     def switch_huge_on(self):
         self.__current_huge_on = not self.__current_huge_on
 
-    def setInterval(self, fn, delay, params):
+    def set_interval_with_param(self, fn, delay, params):
         timer = CustomizedTimer(self, fn, delay, params)
         timer.setRepeats(True)
         # timer.start()
         return timer
 
-    def createTimer(self, fn, delay, params):
-        return CustomizedTimer(fn, delay, params)
+    def get_elements_at(self, x, y):
+        content = []
+        for gobj in reversed(self.base.contents):
+            if gobj.contains(x, y):
+                content.append(gobj)
+        return content
 
     def start_reset_handler(self):
         if not self.__start_flag:
@@ -304,6 +308,8 @@ class TopInfoBar(GraphicLib.GCompound):
 
         self.add(half_exp_prompt, self.HALF_EXP_PROMPT_X_COOR, self.HALF_EXP_PROMPT_Y_COOR)
         self.add(self.__half_exp_label, self.HALF_EXP_LABEL_X_COOR, self.HALF_EXP_PROMPT_Y_COOR)
+
+        # buff info section
 
     @property
     def score_label(self):

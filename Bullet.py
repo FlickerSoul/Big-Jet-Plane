@@ -43,7 +43,7 @@ class SingleMG(GraphicLib.GRect):
         return self.__damage
 
     def move_animation(self):
-        self.timer = self.main_window.setInterval(self.move_to, MOVE_DELAY, (0, -self.flying_speed))
+        self.timer = self.main_window.set_interval_with_param(self.move_to, MOVE_DELAY, (0, -self.flying_speed))
         self.timer.start()
 
     def move_to(self, dx, dy):
@@ -91,7 +91,7 @@ class NMG(GraphicLib.GCompound):
         self.com_width = (Components.BigJetPlane.TEST_SIZE - self.getWidth()) / 2
 
     def move_animation(self):
-        self.timer = self.main_window.setInterval(self.move_to, MOVE_DELAY, (0, -FLYING_SPEED))
+        self.timer = self.main_window.set_interval_with_param(self.move_to, MOVE_DELAY, (0, -FLYING_SPEED))
         self.timer.start()
 
     def move_to(self, dx, dy):
@@ -171,7 +171,7 @@ class LightBallStringCompound(GraphicLib.GCompound):
         self.com_width = (Components.BigJetPlane.TEST_SIZE - self.getWidth()) / 2
 
         # speed is positive, moving downward
-        self.timer = self.main_window.setInterval(self.move_to, LightBallStringCompound.LIGHT_BALL_MOVE_DELAY, (0, flying_speed))
+        self.timer = self.main_window.set_interval_with_param(self.move_to, LightBallStringCompound.LIGHT_BALL_MOVE_DELAY, (0, flying_speed))
         self.move_animation()
 
     def move_animation(self):

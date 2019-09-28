@@ -2,12 +2,14 @@ import pgl as GraphicLib
 import Graphics
 import enum
 import Bullet
+import Buffs
+import random
 
 
 FlyingObjectKind = enum.Enum("FlyingObjectKind", ("SELF", "ENEMY"))
 
 
-class FlyingObject(GraphicLib.GCompound):  # TODO change it to GImage
+class FlyingObject(GraphicLib.GCompound):
     BLAST_START_1 = 5
     BLAST_START_2 = 27
 
@@ -32,13 +34,14 @@ class FlyingObject(GraphicLib.GCompound):  # TODO change it to GImage
         self.__identity = identity
         self.__flying_speed = flying_speed
         self.__health = health
+        self.__max_health = self.health
         self.__bullet_damage = bullet_damage
         self.__object_level = object_level
         self.__main_window = main_window
         self.__attack_type = attack_type
         self.__attack_interval = attack_interval
         # self.attack_timer = None
-        self.attack_timer = self.main_window.setInterval(self.attack_method, self.attack_interval, (self.attack_type,))
+        self.attack_timer = self.main_window.set_interval_with_param(self.attack_method, self.attack_interval, (self.attack_type,))
 
         image = GraphicLib.GImage(appearance_file_path)
         self.add(image)
@@ -90,6 +93,16 @@ class FlyingObject(GraphicLib.GCompound):  # TODO change it to GImage
         self.__health += value
         if self.__health <= 0:
             self.boom()
+        elif self.__health > self.__max_health:
+            self.__health = self.__max_health
+
+    @property
+    def max_health(self):
+        return self.__max_health
+
+    @max_health.setter
+    def max_health(self, value):
+        self.__max_health = value
 
     @property
     def bullet_damage(self):
@@ -247,7 +260,6 @@ class BigJetPlane(FlyingObject):
         self.__is_nuclear_shield_on = False
 
         self.__score = 0
-        self.max_health = self.health
         self.main_window.refill_health()
 
         self.__normal_shield_timer = None
@@ -264,7 +276,7 @@ class BigJetPlane(FlyingObject):
         return self.__is_normal_shield_on
 
     def set_normal_shield_on(self, time_out):
-        if not self.__is_normal_shield_on:
+        if (not self.__is_normal_shield_on) and (not self.__is_nuclear_shield_on):
             self.__normal_shield_timer = GraphicLib.GTimer(self.main_window, self.set_normal_shield_off, time_out)
             self.__normal_shield_timer.start()
             self.__is_normal_shield_on = True
@@ -281,13 +293,12 @@ class BigJetPlane(FlyingObject):
         return self.__is_nuclear_shield_on
 
     def set_nuclear_shield_on(self, time_out):
-        if not self.__is_nuclear_shield_on:
-            self.__nuclear_shield_timer = GraphicLib.GTimer(self.main_window, self.set_normal_shield_off, time_out)
+        if (not self.__is_nuclear_shield_on) and (not self.__is_normal_shield_on):
+            self.__nuclear_shield_timer = GraphicLib.GTimer(self.main_window, self.set_nuclear_shield_off, time_out)
             self.__nuclear_shield_timer.start()
             self.__is_nuclear_shield_on = True
             self.protector.setColor(self.NUCLEAR_PROTECTOR_COLOR)
             self.add(self.protector, -(self.SHIELD_SIZE - self.TEST_SIZE)/2, -(self.SHIELD_SIZE - self.TEST_SIZE)/2)
-
 
     def set_nuclear_shield_off(self):
         if self.__is_nuclear_shield_on:
@@ -355,6 +366,7 @@ class BigJetPlane(FlyingObject):
     def change_health_with(self, value):
         super().change_health_with(value)
         print(self.health)
+
         self.main_window.set_health_percentage(self.health / self.max_health)
 
     def upgrade_bullet_num(self):
@@ -393,11 +405,12 @@ class BigJetPlane(FlyingObject):
     def add_protector_buff(self):
         self.set_normal_shield_on(10000)
 
-    def add_NB_protector_buff(self):
+    def add_nuclear_protector_buff(self):
         self.set_nuclear_shield_on(1000)
 
     def add_health_buff(self):
         self.change_health_with(20)
+
 
 class Enemy(FlyingObject):
     SPEED = 3
@@ -431,9 +444,22 @@ class Enemy(FlyingObject):
                          health=self.health, bullet_damage=1E+10, attack_type=attack_type,
                          object_level=1, attack_interval=self.ATTACK_INTERVAL)
 
-        self.move_timer = self.main_window.setInterval(self.move_to, self.MOVE_DELAY, ())
+        self.move_timer = self.main_window.set_interval_with_param(self.move_to, self.MOVE_DELAY, ())
+        self.buff = self.generate_buff()
+
         self.move_animation()
         self.attack()
+
+    def generate_buff(self):
+        indicator = random.random()
+        if 0 <= indicator < 1/4:
+            return Buffs.BuffBase.add_health_buff_factory(self.main_window, BigJetPlane)
+        elif 1/4 <= indicator < 5/12:
+            return Buffs.BuffBase.add_protector_buff_factory(self.main_window, BigJetPlane)
+        elif 26/36 <= indicator < 8/9:
+            return Buffs.BuffBase.add_nuclear_protector_buff_factory(self.main_window, BigJetPlane)
+        elif 8/9 <= indicator < 1:
+            return Buffs.BuffBase.add_bullet_buff_factory(self.main_window, BigJetPlane)
 
     def attack_method(self, attack_type):
         if self.move_flag and self.main_window.start_flag:
@@ -460,10 +486,10 @@ class Enemy(FlyingObject):
                 self.move(0, self.SPEED)
 
     def boom(self):
+        self.drop_buff()
         self.main_window.decrease_enemy_on_board()
         self.main_window.interval_list.pop(self)
         if self.main_window.big_jet_plane is not None:
-            print(self.__repr__(), "worth point", self.worth_exp)
             self.main_window.big_jet_plane.update_score(self.worth_exp)
 
         super().boom()
@@ -535,11 +561,12 @@ class Enemy(FlyingObject):
         cls.reset_health()
         cls.reset_speed()
 
-
-
-
-
-
+    def drop_buff(self):
+        center = (self.getX() + BigJetPlane.TEST_SIZE, self.getY() + BigJetPlane.TEST_SIZE)
+        if self.buff is not None:
+            self.main_window.add(self.buff, *center)
+            self.buff.sendToBack()
+            self.buff.animation()
 
 
 class Swift(Enemy):
@@ -554,6 +581,7 @@ class Swift(Enemy):
 
     def __init__(self, main_window):
         super().__init__(main_window, Bullet.BulletIdentity.LIGHT_BALL.cls)
+
 
 class Normal(Enemy):
     MOVE_DELAY = 10

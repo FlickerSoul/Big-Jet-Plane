@@ -1,6 +1,7 @@
 import pgl as GraphicLib
 import Components
 import random
+import threading
 
 
 # Constant Pool
@@ -10,8 +11,24 @@ MAX_ENEMY = 4
 PUT_ENEMY_INTERVAL = 2000
 
 
-class CustomizedMainWindow(GraphicLib.GWindow):
+class DoubleClickInterruptException(Exception):
+    pass
 
+
+class CTimer(threading.Timer):
+    def __init__(self, interval, function, args=None, kwargs=None):
+        super().__init__(interval, function, args, kwargs)
+
+    def return_start(self):
+        super().start()
+        return self
+
+    def cancel(self) -> None:
+        super().cancel()
+        raise DoubleClickInterruptException
+
+
+class CustomizedMainWindow(GraphicLib.GWindow):
     def __init__(self, width, height):
         super().__init__(width, height)
 
@@ -23,26 +40,15 @@ class CustomizedMainWindow(GraphicLib.GWindow):
         self.__current_boss_on = False
         self.__current_huge_on = False
 
-        self.start_prompt = GraphicLib.GLabel("Double Click To Start \n Click On The Plane To Control")
-        self.start_prompt.setColor('blue')
-        self.start_prompt_width = self.start_prompt.getWidth()
-        self.start_prompt_height = self.start_prompt.getHeight()
-
-        self.end_prompt = GraphicLib.GLabel("Double Click To Start")
-        self.end_prompt.setColor('blue')
-        self.end_prompt_width = self.end_prompt.getWidth()
-        self.end_prompt_height = self.end_prompt.getHeight()
-
-        self.__end_label = GraphicLib.GLabel("")
+        self.__end_label = GraphicLib.GLabel("Double Click To Start \n Click On The Plane To Control")
 
         self.interval_list = {}
         self.below_everything_list = []
         self.above_everything_list = []
 
-        self.start_click_button = GraphicLib.GButton("Click To Strat", self.start_reset_handler)
+        self.start_click_button = GraphicLib.GButton("Click To Strat", self.first_start)
         self.BUTTON_WIDTH = self.start_click_button.getWidth()
         self.BUTTON_HEIGHT = self.start_click_button.getHeight()
-        # self.addEventListener('drag', self.start_reset_handler)
         self.add(self.start_click_button, (WINDOW_WIDTH - self.start_click_button.getWidth())/2, (WINDOW_HEIGHT - self.start_click_button.getHeight())/2)
         self.__clock = self.set_interval_with_param(self.add_enemy, PUT_ENEMY_INTERVAL, ())
 
@@ -55,8 +61,10 @@ class CustomizedMainWindow(GraphicLib.GWindow):
         self.huge_num = 0
         self.boss_num = 0
 
-        # self.reset()
-        self.start()
+        self.click_timer = None
+        self.init()
+
+        # self.start()
 
     @property
     def start_flag(self):
@@ -104,45 +112,86 @@ class CustomizedMainWindow(GraphicLib.GWindow):
 
     def reset(self):
         self.clear()
-        self.repaint_info_bar()
+        self.repaint_info_bar_and_plane()
         self.reset_enemy_property()
 
-    def repaint_info_bar(self):
+    def paint_plane(self):
+        self.big_jet_plane = Components.BigJetPlane(self)
+        self.add(self.big_jet_plane, (WINDOW_WIDTH - Components.BigJetPlane.TEST_SIZE) / 2,
+                 (WINDOW_HEIGHT - Components.BigJetPlane.TEST_SIZE))
+        self.addEventListener("click", self.click_listener)
+        self.addEventListener("mousemove", self.big_jet_plane.move_listener)
+
+    def repaint_info_bar_and_plane(self):
         self.add(self.__top_info_bar, 0, 0)
         self.reset_info_bar_score()
         self.reset_damage_label(10)
         self.reset_level_label()
         self.reset_half_exp()
+        self.reset_normal_protector_time()
+        self.reset_nuclear_protector_time()
+        self.reset_nuclear_boom_remaining_num()
+
+        self.paint_plane()
+
+    def first_start(self):
+        self.start_click_button.fn = self.start_reset_handler
+        self.remove(self.__end_label)
+        self.remove(self.start_click_button)
+        self.remove(self.start_click_button)
+
+        self.set_start()
+        self.__clock.start()
 
     def start(self):
         self.reset()
         self.remove(self.start_click_button)
-        # self.__start_flag = True
         self.set_start()
-        self.init()
 
     def add_start_button_at(self, x, y):
         self.add(self.start_click_button, x, y)
 
     def end(self):
         self.set_end()
-        # self.add(self.end_prompt, (WINDOW_WIDTH - self.end_prompt_width)/2, (WINDOW_WIDTH - self.end_prompt_height)/2)
         # set up end label
-        self.__end_label.setLabel("You Got " + str(self.get_score()) + " Score!!!")
+        self.__end_label.setLabel("You Got " + str(self.get_score()) + " Score!!! \n\nAdd money to become stronger!!! \n(Not Implemented Yet)")
+        # set up payment
         label_width = self.__end_label.getWidth()
         label_height = self.__end_label.getHeight()
-        self.add(self.__end_label, (WINDOW_WIDTH - label_width)/2, (WINDOW_WIDTH - label_height)/2)
-        # self.add(self.start_click_button, (WINDOW_WIDTH - self.BUTTON_WIDTH)/2, (WINDOW_WIDTH - self.BUTTON_HEIGHT)/2 + label_height)
+        self.add(self.__end_label, (WINDOW_WIDTH - label_width/3)/2, (WINDOW_WIDTH - label_height)/2)
         self.add_start_button_at((WINDOW_WIDTH - self.BUTTON_WIDTH) / 2, (WINDOW_WIDTH - self.BUTTON_HEIGHT) / 2 + label_height)
 
+        photo = GraphicLib.GImage("./resources/paypal.png")
+        self.add(photo, (WINDOW_WIDTH - photo.getWidth()) / 2, (WINDOW_WIDTH - self.BUTTON_HEIGHT) / 2 + label_height + self.start_click_button.getHeight() + 20)
 
     def init(self):
-        self.big_jet_plane = Components.BigJetPlane(self)
-        self.add(self.big_jet_plane, (WINDOW_WIDTH - Components.BigJetPlane.TEST_SIZE)/2, (WINDOW_HEIGHT - Components.BigJetPlane.TEST_SIZE))
-        self.addEventListener('click', self.big_jet_plane.move_flag_listener)
-        self.addEventListener('mousemove', self.big_jet_plane.move_listener)
+        self.paint_plane()
+        label_width = self.__end_label.getWidth()
+        label_height = self.__end_label.getHeight()
+        self.add(self.__end_label, (WINDOW_WIDTH - label_width / 3) / 2, (WINDOW_WIDTH - label_height) / 2)
+        self.add_start_button_at((WINDOW_WIDTH - self.BUTTON_WIDTH) / 2,
+                                 (WINDOW_WIDTH - self.BUTTON_HEIGHT) / 2 + label_height)
 
-        self.__clock.start()
+    def click_listener(self, e):
+        if self.click_timer is None:
+            self.click_timer = CTimer(0.2, self.single_click_manager, [e]).return_start()
+        else:
+            try:
+                self.click_timer.cancel()
+            except DoubleClickInterruptException:
+                self.double_click_manager()
+            except Exception:
+                print("Unknown Exception")
+                import sys
+                sys.exit()
+
+    def single_click_manager(self, e):
+        self.click_timer = None
+        self.big_jet_plane.move_flag_listener(e)
+
+    def double_click_manager(self):
+        self.click_timer = None
+        self.big_jet_plane.nuclear_boom_attack()
 
     def add_enemy(self):
         if self.__start_flag:
@@ -194,8 +243,9 @@ class CustomizedMainWindow(GraphicLib.GWindow):
     def set_health_percentage(self, value):
         self.__top_info_bar.set_health_percentage(value)
 
-    def refill_health(self):
+    def refill_health(self, max_health):
         self.__top_info_bar.set_health_percentage(1)
+        self.__top_info_bar.set_health_text(max_health)
 
     def get_score(self):
         return self.__top_info_bar.get_score()
@@ -222,11 +272,34 @@ class CustomizedMainWindow(GraphicLib.GWindow):
         for cls in Components.Enemy.__subclasses__():
             cls.reset_property()
 
+    def set_normal_protector_time(self, value):
+        self.__top_info_bar.set_normal_protector_buff_time(value)
+
+    def reset_normal_protector_time(self):
+        self.__top_info_bar.set_normal_protector_buff_time(0)
+
+    def set_nuclear_protector_time(self, value):
+        self.__top_info_bar.set_nuclear_protector_remaining_time(value)
+
+    def reset_nuclear_protector_time(self):
+        self.__top_info_bar.set_nuclear_protector_remaining_time(0)
+
+    def set_health_text(self, value):
+        self.__top_info_bar.set_health_text(value)
+
+    def set_nuclear_boom_remaining_num(self, value):
+        self.__top_info_bar.set_nuclear_boom_remaining_num(value)
+
+    def reset_nuclear_boom_remaining_num(self):
+        self.__top_info_bar.set_nuclear_boom_remaining_num(1)
+
+
 class Background(GraphicLib.GCompound):
     def __init__(self):
         super().__init__()
-
         #  not implemented
+
+
 # Global Variables
 main_window: CustomizedMainWindow
 
@@ -249,6 +322,8 @@ class TopInfoBar(GraphicLib.GCompound):
         background.setFilled(True)
         self.add(background, 0, 0)
 
+        # left part
+
         # insert score bar
         score_prompt = GraphicLib.GLabel("SCORE/EXP: ")
         self.SCORE_LABEL_Y_COOR = self.BAR_HEIGHT / 3
@@ -260,16 +335,64 @@ class TopInfoBar(GraphicLib.GCompound):
         self.add(score_prompt, self.LABEL_X_MARGIN, self.SCORE_LABEL_Y_COOR)
         self.add(self.__score_label, self.SCORE_X_COOR, self.SCORE_LABEL_Y_COOR)
 
+        # nuclear protector buff info
+
+        nuclear_protector_buff_prompt_head = GraphicLib.GLabel("N: ")
+        nuclear_protector_buff_prompt_head.setFont("bold 20px 'Times New Roman'")
+
+        self.__nuclear_protector_buff_time_label = GraphicLib.GLabel("0")
+
+        self.NUCLEAR_PROTECTOR_BUFF_PROMPT_H_X_COOR = self.LABEL_X_MARGIN
+        self.NUCLEAR_PROTECTOR_PROMPT_N_X_COOR = self.NUCLEAR_PROTECTOR_BUFF_PROMPT_H_X_COOR + nuclear_protector_buff_prompt_head.getWidth()
+        self.NUCLEAR_PROTECTOR_PROMPT_Y_COOR = nuclear_protector_buff_prompt_head.getHeight() + self.SCORE_LABEL_Y_COOR
+
+        self.add(nuclear_protector_buff_prompt_head, self.NUCLEAR_PROTECTOR_BUFF_PROMPT_H_X_COOR, self.NUCLEAR_PROTECTOR_PROMPT_Y_COOR)
+        self.add(self.__nuclear_protector_buff_time_label, self.NUCLEAR_PROTECTOR_PROMPT_N_X_COOR, self.NUCLEAR_PROTECTOR_PROMPT_Y_COOR)
+
+        # nuclear boom info
+
+        nuclear_boom_remaining_prompt = GraphicLib.GLabel("NBoom: ")
+        self.__nuclear_boom_remaining_num_label = GraphicLib.GLabel("1")
+
+        self.NUCLEAR_BOOM_PROMPT_X_COOR = self.NUCLEAR_PROTECTOR_PROMPT_N_X_COOR + \
+                                          self.__nuclear_protector_buff_time_label.getWidth()+ \
+                                          self.TEXT_INTERVAL * 3
+        self.NUCLEAR_BOOM_NUM_LABEL_X_COOR = self.NUCLEAR_BOOM_PROMPT_X_COOR + nuclear_boom_remaining_prompt.getWidth()
+        self.NUCLEAR_BOOM_PROMPT_Y_COOR = self.NUCLEAR_PROTECTOR_PROMPT_Y_COOR
+
+        self.add(nuclear_boom_remaining_prompt, self.NUCLEAR_BOOM_PROMPT_X_COOR, self.NUCLEAR_BOOM_PROMPT_Y_COOR)
+        self.add(self.__nuclear_boom_remaining_num_label, self.NUCLEAR_BOOM_NUM_LABEL_X_COOR, self.NUCLEAR_BOOM_PROMPT_Y_COOR)
+
+        # normal protector buff info
+
+        protector_buff_prompt_head = GraphicLib.GLabel("P: ")
+        protector_buff_prompt_head.setFont("bold 20px 'Times New Roman'")
+
+        self.__protector_buff_time_label = GraphicLib.GLabel("0")
+
+        self.PROTECTOR_BUFF_H_X_COOR = self.NUCLEAR_PROTECTOR_BUFF_PROMPT_H_X_COOR
+        self.PROTECTOR_BUFF_PROMPT_Y_COOR = self.NUCLEAR_PROTECTOR_PROMPT_Y_COOR + protector_buff_prompt_head.getHeight()
+        self.PROTECTOR_BUFF_N_X_COOR = self.PROTECTOR_BUFF_H_X_COOR + protector_buff_prompt_head.getWidth()
+
+        self.add(protector_buff_prompt_head, self.PROTECTOR_BUFF_H_X_COOR, self.PROTECTOR_BUFF_PROMPT_Y_COOR)
+        self.add(self.__protector_buff_time_label, self.PROTECTOR_BUFF_N_X_COOR, self.PROTECTOR_BUFF_PROMPT_Y_COOR)
+
+        # right part
+
         # insert health bar
         self.__health_bar_frame = GraphicLib.GRect(self.HEALTH_BAR_LENGTH, self.SCORE_LABEL_HEIGHT)
         self.__health_bar_frame.setColor('red')
         self.__health_bar = GraphicLib.GRect(self.HEALTH_BAR_LENGTH, self.SCORE_LABEL_HEIGHT)
         self.__health_bar.setColor('darkred')
         self.__health_bar.setFilled(True)
+        self.__health_num_text = GraphicLib.GLabel("100")
 
         self.HEALTH_BAR_Y_COOR = score_prompt.getY() - score_prompt.getHeight() / 1.15
         self.HEALTH_BAR_X_COOR = self.BAR_WIDTH - self.HEALTH_BAR_MARGIN - self.HEALTH_BAR_LENGTH
+        self.HEALTH_NUM_TEXT_X_COOR = self.HEALTH_BAR_X_COOR - self.__health_num_text.getWidth() - self.TEXT_INTERVAL*2
+        self.HEALTH_NUM_TEXT_Y_COOR = score_prompt.getY()
 
+        self.add(self.__health_num_text, self.HEALTH_NUM_TEXT_X_COOR, self.HEALTH_NUM_TEXT_Y_COOR)
         self.add(self.__health_bar_frame, self.HEALTH_BAR_X_COOR, self.HEALTH_BAR_Y_COOR)
         self.add(self.__health_bar, self.HEALTH_BAR_X_COOR, self.HEALTH_BAR_Y_COOR)
 
@@ -278,7 +401,7 @@ class TopInfoBar(GraphicLib.GCompound):
 
         # damage info
         damage_prompt = GraphicLib.GLabel("DAMAGE: ")
-        self.__damage_label = GraphicLib.GLabel("0")
+        self.__damage_label = GraphicLib.GLabel("10")
 
         self.DAMAGE_PROMPT_X_COOR = self.HEALTH_BAR_X_COOR
         self.DAMAGE_PROMPT_Y_COOR = self.HEALTH_BAR_Y_COOR + self.health_bar.getHeight() + damage_prompt.getHeight()
@@ -308,8 +431,36 @@ class TopInfoBar(GraphicLib.GCompound):
 
         self.add(half_exp_prompt, self.HALF_EXP_PROMPT_X_COOR, self.HALF_EXP_PROMPT_Y_COOR)
         self.add(self.__half_exp_label, self.HALF_EXP_LABEL_X_COOR, self.HALF_EXP_PROMPT_Y_COOR)
+        
+    @property
+    def get_nuclear_protector_time_label(self):
+        return self.__nuclear_protector_buff_time_label
 
-        # buff info section
+    def get_nuclear_protector_time(self):
+        return self.__nuclear_protector_buff_time_label.getLabel()
+
+    def set_nuclear_protector_remaining_time(self, value):
+        self.__nuclear_protector_buff_time_label.setLabel(value)
+
+    @property
+    def get_nuclear_boom_remaining_num_label(self):
+        return self.__nuclear_boom_remaining_num_label
+
+    def get_nuclear_boom_remaining_num(self):
+        return self.__nuclear_boom_remaining_num_label.getLabel()
+
+    def set_nuclear_boom_remaining_num(self, value):
+        self.__nuclear_boom_remaining_num_label.setLabel(str(value))
+
+    @property
+    def get_normal_protector_time_label(self):
+        return self.__protector_buff_time_label
+
+    def get_normal_protector_buff_time(self):
+        return self.__protector_buff_time_label.getLabel()
+
+    def set_normal_protector_buff_time(self, value):
+        self.__protector_buff_time_label.setLabel(str(value))
 
     @property
     def score_label(self):
@@ -320,6 +471,16 @@ class TopInfoBar(GraphicLib.GCompound):
 
     def set_score(self, value: str):
         self.__score_label.setLabel(value)
+
+    @property
+    def health_text(self):
+        return self.__health_num_text
+
+    def set_health_text(self, value):
+        value = int(value)
+        if value < 0:
+            value = 0
+        self.__health_num_text.setLabel(str(value))
 
     @property
     def health_bar(self):
@@ -365,11 +526,9 @@ def init():
     # set up main window
     global main_window
     main_window = CustomizedMainWindow(WINDOW_WIDTH, WINDOW_HEIGHT)
-    main_window.setWindowTitle("卡")
+    main_window.setWindowTitle("Big Jet Plane(卡)")
 
     # TODO pause button (optional)
-
-    # set up background
     # TODO add background rocks
     # TODO add background moving animation
 

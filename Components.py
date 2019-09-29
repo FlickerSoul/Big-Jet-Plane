@@ -79,7 +79,6 @@ class FlyingObject(GraphicLib.GCompound):
 
     @health.setter
     def health(self, value):
-        print(self.__health)
         self.__health = value
 
     def change_health_by(self, times):
@@ -94,6 +93,7 @@ class FlyingObject(GraphicLib.GCompound):
         if self.__health <= 0:
             self.boom()
         elif self.__health > self.__max_health:
+            self.max_health += (self.health-self.max_health)/2
             self.__health = self.__max_health
 
     @property
@@ -242,9 +242,9 @@ class BigJetPlane(FlyingObject):
     next_score_range = range(*LEVEL_UP_RANGE)
     LEVEL_UP_SCALE = 2
     DETECT_RANGE = 50
-    NB_RANGE = 100
+    NB_RANGE = 10
 
-    START_SHIELD_TIME = 3000
+    START_SHIELD_CYCLE_COUNT = 3
 
     def __init__(self, main_window: Graphics.CustomizedMainWindow):
         super().__init__(main_window, FlyingObjectIdentity.BIG_JET_PLANE,
@@ -260,28 +260,53 @@ class BigJetPlane(FlyingObject):
         self.__is_nuclear_shield_on = False
 
         self.__score = 0
-        self.main_window.refill_health()
+        self.main_window.refill_health(self.max_health)
 
         self.__normal_shield_timer = None
         self.__nuclear_shield_timer = None
+        self.nuclear_effect_timer = None
 
-        self.__nuclear_boom_remaining = 0
+        self.__nuclear_boom_remaining = 1
+
+        self.__normal_protector_time = 0
+        self.__nuclear_protector_time = 0
+        self.__nuclear_effect_cycle = 0
 
         self.attack()
 
-        self.set_normal_shield_on(self.START_SHIELD_TIME)
+        self.set_normal_shield_on(self.START_SHIELD_CYCLE_COUNT)
+
+    def change_normal_protector_time(self, value):
+        self.__normal_protector_time = value
+        self.main_window.set_normal_protector_time(value)
+
+    def change_normal_protector_time_with(self, delta):
+        self.__normal_protector_time += delta
+        self.main_window.set_normal_protector_time(self.__normal_protector_time)
 
     @property
     def is_normal_shield_on(self):
         return self.__is_normal_shield_on
 
-    def set_normal_shield_on(self, time_out):
-        if (not self.__is_normal_shield_on) and (not self.__is_nuclear_shield_on):
-            self.__normal_shield_timer = GraphicLib.GTimer(self.main_window, self.set_normal_shield_off, time_out)
-            self.__normal_shield_timer.start()
-            self.__is_normal_shield_on = True
-            self.protector.setColor(self.NORMAL_PROTECTOR_COLOR)
-            self.add(self.protector, -(self.SHIELD_SIZE - self.TEST_SIZE)/2, -(self.SHIELD_SIZE - self.TEST_SIZE)/2)
+    def set_normal_shield_on(self, cycle_count):
+        if not self.__is_nuclear_shield_on:
+            if not self.__is_normal_shield_on:
+                self.change_normal_protector_time(cycle_count)
+                self.__normal_shield_timer = self.main_window.setInterval(self.normal_shield_count, 1000)
+                self.__is_normal_shield_on = True
+                self.protector.setColor(self.NORMAL_PROTECTOR_COLOR)
+                self.add(self.protector, -(self.SHIELD_SIZE - self.TEST_SIZE)/2, -(self.SHIELD_SIZE - self.TEST_SIZE)/2)
+            else:
+                self.change_normal_protector_time_with(cycle_count)
+        else:
+            self.update_score(3)
+
+    def normal_shield_count(self):
+        self.change_normal_protector_time_with(-1)
+
+        if self.__normal_protector_time == 0:
+            self.set_normal_shield_off()
+            self.__normal_shield_timer.stop()
 
     def set_normal_shield_off(self):
         if self.__is_normal_shield_on:
@@ -292,13 +317,32 @@ class BigJetPlane(FlyingObject):
     def is_nuclear_shield_on(self):
         return self.__is_nuclear_shield_on
 
-    def set_nuclear_shield_on(self, time_out):
-        if (not self.__is_nuclear_shield_on) and (not self.__is_normal_shield_on):
-            self.__nuclear_shield_timer = GraphicLib.GTimer(self.main_window, self.set_nuclear_shield_off, time_out)
-            self.__nuclear_shield_timer.start()
-            self.__is_nuclear_shield_on = True
-            self.protector.setColor(self.NUCLEAR_PROTECTOR_COLOR)
-            self.add(self.protector, -(self.SHIELD_SIZE - self.TEST_SIZE)/2, -(self.SHIELD_SIZE - self.TEST_SIZE)/2)
+    def change_nuclear_protector_time(self, value):
+        self.__nuclear_protector_time = value
+        self.main_window.set_nuclear_protector_time(value)
+
+    def change_nuclear_protector_time_with(self, delta):
+        self.__nuclear_protector_time += delta
+        self.main_window.set_nuclear_protector_time(self.__nuclear_protector_time)
+
+    def set_nuclear_shield_on(self, cycle_count):
+        if not self.__is_normal_shield_on:
+            if not self.__is_nuclear_shield_on:
+                self.change_nuclear_protector_time(cycle_count)
+                self.__nuclear_shield_timer = self.main_window.setInterval(self.nuclear_shield_count, 1000)
+                self.__is_nuclear_shield_on = True
+                self.protector.setColor(self.NUCLEAR_PROTECTOR_COLOR)
+                self.add(self.protector, -(self.SHIELD_SIZE - self.TEST_SIZE)/2, -(self.SHIELD_SIZE - self.TEST_SIZE)/2)
+            else:
+                self.change_nuclear_protector_time_with(cycle_count)
+        self.update_score(5)
+
+    def nuclear_shield_count(self):
+        self.change_nuclear_protector_time_with(-1)
+
+        if self.__nuclear_protector_time == 0:
+            self.set_nuclear_shield_off()
+            self.__nuclear_shield_timer.stop()
 
     def set_nuclear_shield_off(self):
         if self.__is_nuclear_shield_on:
@@ -311,9 +355,11 @@ class BigJetPlane(FlyingObject):
 
     def nuclear_boom_increase(self):
         self.__nuclear_boom_remaining += 1
+        self.main_window.set_nuclear_boom_remaining_num(self.__nuclear_boom_remaining)
 
     def nuclear_boom_decrease(self):
         self.__nuclear_boom_remaining -= 1
+        self.main_window.set_nuclear_boom_remaining_num(self.__nuclear_boom_remaining)
 
     @property
     def score(self):
@@ -339,44 +385,46 @@ class BigJetPlane(FlyingObject):
         super().increase_object_level(level)
         self.main_window.set_level_label(self.object_level)
 
-    def increase_damage_with(self, times):
-        super().increase_damage_with(times)
+    def increase_damage_with(self, value):
+        super().increase_damage_with(value)
         self.main_window.set_damage_label(self.bullet_damage)
 
     def upgrade_level(self, upgraded_level=1):
         self.increase_object_level(upgraded_level)
-        self.increase_damage_with(1)
+        self.increase_damage_with(10)
         self.level_to_health_conversion()
         self.get_harder()
         self.upgrade_bullet_num()
 
     def level_to_health_conversion(self):
-        self.health = self.object_level * 25 + 100  # base health
+        self.health += self.object_level * 50
         self.max_health = self.health
-        self.main_window.refill_health()
+        self.main_window.refill_health(self.max_health)
 
     def get_harder(self):
         for cls in Enemy.__subclasses__():
             cls.level_up(self.main_window.big_jet_plane.object_level,
                          self.main_window.big_jet_plane.object_level,
-                         self.main_window.big_jet_plane.object_level/5)
+                         1.1)
 
         self.main_window.set_half_exp_X(self.object_level - 1)
 
     def change_health_with(self, value):
         super().change_health_with(value)
-        print(self.health)
-
+        self.main_window.set_health_text(self.health)
+        # print(self.health)
+        if self.health == self.max_health:
+            self.update_score(2)
         self.main_window.set_health_percentage(self.health / self.max_health)
 
     def upgrade_bullet_num(self):
-        if self.attack_type == 4:
-            self.increase_damage_with(1)
+        if self.attack_type == 5:
+            self.increase_damage_with(5)
         else:
             self.attack_type += 1
 
     # TODO combine with text modifiers
-    def move_flag_listener(self, e: GraphicLib.GMouseEvent):
+    def move_flag_listener(self, e):
         if self.contains(e.getX(), e.getY()):
             self.move_flag = not self.move_flag
             if self.move_flag:
@@ -389,11 +437,34 @@ class BigJetPlane(FlyingObject):
     def move_to(self, x, y):
         self.move(x - self.getX() - BigJetPlane.HALF_WIDTH, y - self.getY() - BigJetPlane.HALF_HEIGHT)
 
-    def attack_method(self, attack_type):
+    def attack_method(self, attack_type):  # TODO change the start position of the bullets
         if self.move_flag:
             bullet = Bullet.NMG(self.bullet_damage, self.main_window, self.attack_type)
-            self.main_window.add(bullet, self.getX() + bullet.com_width, self.getY())
+            self.main_window.add(bullet, self.getX() + bullet.com_width, self.getY()-bullet.getHeight())
             bullet.move_animation()
+
+    def nuclear_effect(self):
+        self.__nuclear_effect_cycle -= 1
+        if self.__nuclear_effect_cycle == 0:
+            self.nuclear_effect_timer.stop()
+        else:
+            if not self.is_nuclear_shield_on:
+                self.change_health_with(-0.1)
+
+    def nuclear_boom_attack(self):
+        if self.__nuclear_boom_remaining > 0:
+            self.nuclear_boom_decrease()
+            self.__nuclear_effect_cycle = 350
+            self.nuclear_effect_timer = self.main_window.setInterval(self.nuclear_effect, 15)  # 8.5S radioactive effect
+            for ele in self.main_window.base.contents:
+                if issubclass(ele.__class__, Enemy):
+                    ele.boom()
+
+    def shield_timer_end(self):
+        self.__nuclear_shield_timer.stop()
+        self.__normal_shield_timer.stop()
+        self.change_nuclear_protector_time(0)
+        self.change_normal_protector_time(0)
 
     def boom(self):
         super().boom()
@@ -403,13 +474,13 @@ class BigJetPlane(FlyingObject):
         self.upgrade_bullet_num()
 
     def add_protector_buff(self):
-        self.set_normal_shield_on(10000)
+        self.set_normal_shield_on(10)
 
     def add_nuclear_protector_buff(self):
-        self.set_nuclear_shield_on(1000)
+        self.set_nuclear_shield_on(10)
 
     def add_health_buff(self):
-        self.change_health_with(20)
+        self.change_health_with(20 * self.object_level)
 
 
 class Enemy(FlyingObject):
@@ -451,6 +522,7 @@ class Enemy(FlyingObject):
         self.attack()
 
     def generate_buff(self):
+        # TODO change the probability of buff drop
         indicator = random.random()
         if 0 <= indicator < 1/4:
             return Buffs.BuffBase.add_health_buff_factory(self.main_window, BigJetPlane)
@@ -473,22 +545,24 @@ class Enemy(FlyingObject):
         self.move_timer.start()
         self.move_flag = True
 
+    def remove_process(self):
+        self.main_window.remove(self)
+        self.main_window.decrease_enemy_on_board()
+        self.main_window.interval_list.pop(self)
+
     def move_to(self):
         if self.move_flag and self.main_window.start_flag:
             if self.getY() >= Graphics.WINDOW_HEIGHT:
                 self.move_timer.stop()
                 self.move_flag = False
-                self.main_window.remove(self)
-                self.main_window.decrease_enemy_on_board()
-                self.main_window.interval_list.pop(self)
+                self.remove_process()
                 del self
             else:
-                self.move(0, self.SPEED)
+                self.move(0, self.speed)
 
     def boom(self):
         self.drop_buff()
-        self.main_window.decrease_enemy_on_board()
-        self.main_window.interval_list.pop(self)
+        self.remove_process()
         if self.main_window.big_jet_plane is not None:
             self.main_window.big_jet_plane.update_score(self.worth_exp)
 
@@ -513,7 +587,7 @@ class Enemy(FlyingObject):
 
     @classmethod
     def increase_bullet_num(cls):
-        if cls.enemy_level % 2 == 0 and cls.bullet_number < 3:
+        if cls.enemy_level % 2 == 0 and cls.bullet_number < 2:
             cls.bullet_number += 1
 
     @classmethod
@@ -560,9 +634,10 @@ class Enemy(FlyingObject):
         cls.reset_damage()
         cls.reset_health()
         cls.reset_speed()
+        cls.reset_bullet_num()
 
     def drop_buff(self):
-        center = (self.getX() + BigJetPlane.TEST_SIZE, self.getY() + BigJetPlane.TEST_SIZE)
+        center = (self.getX() + BigJetPlane.TEST_SIZE/2, self.getY() + BigJetPlane.TEST_SIZE/2)
         if self.buff is not None:
             self.main_window.add(self.buff, *center)
             self.buff.sendToBack()
@@ -610,8 +685,11 @@ class Huge(Enemy):
     def __init__(self, main_window):
         super().__init__(main_window, Bullet.BulletIdentity.LIGHT_BALL.cls)
 
-    def boom(self):
+    def remove_process(self):
         self.main_window.switch_huge_on()
+        super().remove_process()
+
+    def boom(self):
         super().boom()
 
 
@@ -628,8 +706,11 @@ class Boss(Enemy):
     def __init__(self, main_window):
         super().__init__(main_window, Bullet.BulletIdentity.LIGHT_BALL.cls)
 
-    def boom(self):
+    def remove_process(self):
         self.main_window.switch_boss_on()
+        super().remove_process()
+
+    def boom(self):
         super().boom()
 
 

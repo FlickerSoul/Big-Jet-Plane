@@ -5,8 +5,8 @@ import pgl as GraphicLib
 
 HEIGHT = 15
 WIDTH = 2
-FLYING_SPEED = 15
-MOVE_DELAY = 15
+FLYING_SPEED = 20
+MOVE_DELAY = 20
 
 
 # class SingleMG(GraphicLib.GCompound):
@@ -18,11 +18,6 @@ class SingleMG(GraphicLib.GRect):
         self.__flying_speed = FLYING_SPEED
         self.__appearance_file_path = ""
         self.__damage = damage
-
-        # temp_bullet = GraphicLib.GRect(WIDTH, HEIGHT)
-        # temp_bullet.setColor('orange')
-        # temp_bullet.setFilled(True)
-        # self.add(temp_bullet)
 
         self.setColor('orange')
         self.setFilled(True)
@@ -95,7 +90,7 @@ class NMG(GraphicLib.GCompound):
         self.timer.start()
 
     def move_to(self, dx, dy):
-        if self.getY() + HEIGHT < 0:
+        if self.getY() < 85.4:  # info bar height
             self.timer.stop()
             self.main_window.remove(self)
             del self
@@ -144,7 +139,9 @@ class LightBall(GraphicLib.GOval):
         elem: Components.BigJetPlane = self.main_window.getElementAt(self.getX() + x + 1, y - HEIGHT / 5)
         if issubclass(elem.__class__, Components.BigJetPlane):
             # self.timer.stop()
-            if not elem.is_normal_shield_on:
+            if elem.is_nuclear_shield_on:
+                elem.change_health_with(-self.damage/4)
+            elif not elem.is_normal_shield_on:
                 elem.change_health_with(-self.damage)
             self.getParent().remove(self)
             del self
@@ -153,9 +150,9 @@ class LightBall(GraphicLib.GOval):
 
 
 class LightBallStringCompound(GraphicLib.GCompound):
-    LIGHT_BALL_MOVE_DELAY = 15
+    LIGHT_BALL_MOVE_DELAY = int(15 * 4 / 3)
     LIGHT_BALL_INTERVAL = 2
-    LIGHT_BALL_FLYING_SPEED = 5
+    LIGHT_BALL_FLYING_SPEED = 5 * 4 / 3
 
     def __init__(self, main_window, num, damage, flying_speed=LIGHT_BALL_FLYING_SPEED):
         super().__init__()

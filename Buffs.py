@@ -15,9 +15,7 @@ class BuffBase(GraphicLib.GCompound):
 
     COLOR_STAGE = {1: STAGE_1, 2: STAGE_2, 3: STAGE_3, 4: STAGE_4, 5: STAGE_5, 6: FINAL_STAGE}
 
-    # TODO buff indicator
-
-    def __init__(self, main_window, method, stage_time=1000):
+    def __init__(self, main_window, method, name, stage_time=1000):
         super().__init__()
 
         self.under = GraphicLib.GOval(self.DIAMETER, self.DIAMETER)
@@ -28,8 +26,12 @@ class BuffBase(GraphicLib.GCompound):
         self.upper.setFilled(True)
         self.upper.setColor(self.STAGE_2)
 
+        self.text_indicator = GraphicLib.GLabel(name)
+        self.text_indicator.setColor("white")
+
         self.add(self.under)
         self.add(self.upper)
+        self.add(self.text_indicator, self.RADIUS/2, self.RADIUS * 1.7)
 
         self.main_window = main_window
         self.buff_method = method
@@ -82,22 +84,24 @@ class BuffBase(GraphicLib.GCompound):
 
     @staticmethod
     def add_bullet_buff_factory(main_window, entity):
-        return BuffBase(main_window, entity.bullet_num_increase_buff)
+        return BuffBase(main_window, entity.bullet_num_increase_buff, "B")
 
     @staticmethod
     def add_protector_buff_factory(main_window, entity):
-        return BuffBase(main_window, entity.add_protector_buff)
+        return BuffBase(main_window, entity.add_protector_buff, "P")
 
     @staticmethod
     def add_nuclear_protector_buff_factory(main_window, entity):
-        return BuffBase(main_window, entity.add_nuclear_protector_buff)
+        return BuffBase(main_window, entity.add_nuclear_protector_buff, "N")
 
     @staticmethod
     def add_health_buff_factory(main_window, entity):
-        return BuffBase(main_window, entity.add_health_buff)
+        return BuffBase(main_window, entity.add_health_buff, "H")
 
 
 if __name__ == "__main__":
     import Components
     gw = GraphicLib.GWindow(600, 400)
-    gw.add(BuffBase.add_health_buff_factory(gw, Components.BigJetPlane), 300, 200)
+    buff = BuffBase.add_health_buff_factory(gw, Components.BigJetPlane)
+    gw.add(buff, 300, 200)
+    buff.animation()
